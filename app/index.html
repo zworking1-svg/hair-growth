@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Рост волос</title>
+  <meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121512" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Волосы">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <h1 id="title">Сегодня</h1>
+    <button class="icon-btn" data-act="settings" aria-label="Данные и резервная копия">⚙︎</button>
+  </header>
+
+  <div id="install-hint" class="install" hidden>
+    Чтобы установить: нажмите <b>Поделиться</b> <span aria-hidden="true">⬆︎</span> → <b>На экран «Домой»</b>, затем открывайте приложение с иконки.
+  </div>
+
+  <main id="view"></main>
+
+  <nav class="tabbar">
+    <button data-tab="today"><span class="ti">✓</span>Сегодня<i id="badge-today" class="badge" hidden></i></button>
+    <button data-tab="plan"><span class="ti">💊</span>Схема</button>
+    <button data-tab="photos"><span class="ti">📷</span>Фото</button>
+    <button data-tab="ai"><span class="ti">🧠</span>Трихолог</button>
+    <button data-tab="stats"><span class="ti">📊</span>Аналитика</button>
+  </nav>
+
+  <div id="sheet" class="sheet">
+    <div class="sheet-panel">
+      <button class="sheet-close icon-btn small" data-act="close-sheet" aria-label="Закрыть">✕</button>
+      <div id="sheet-body"></div>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="status"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
