@@ -1,7 +1,7 @@
 // Обёртка над IndexedDB. Все данные хранятся только на телефоне.
 const DB_NAME = 'hairgrowth';
-const VERSION = 1;
-export const STORES = ['items', 'logs', 'photos', 'analyses'];
+const VERSION = 2;
+export const STORES = ['items', 'logs', 'photos', 'analyses', 'meta'];
 
 let dbPromise;
 
@@ -11,12 +11,18 @@ function open() {
       const r = indexedDB.open(DB_NAME, VERSION);
       r.onupgradeneeded = () => {
         const d = r.result;
-        d.createObjectStore('items', { keyPath: 'id' });
-        d.createObjectStore('logs', { keyPath: 'key' }).createIndex('date', 'date');
-        d.createObjectStore('photos', { keyPath: 'id' }).createIndex('date', 'date');
-        d.createObjectStore('analyses', { keyPath: 'id' });
+        const has = (n) => d.objectStoreNames.contains(n);
+        if (!has('items')) d.createObjectStore('items', { keyPath: 'id' });
+        if (!has('logs')) d.createObjectStore('logs', { keyPath: 'key' }).createIndex('date', 'date');
+        if (!has('photos')) d.createObjectStore('photos', { keyPath: 'id' }).createIndex('date', 'date');
+        if (!has('analyses')) d.createObjectStore('analyses', { keyPath: 'id' });
+        if (!has('meta')) d.createObjectStore('meta', { keyPath: 'key' }); // v2: профиль пересадки
       };
-      r.onsuccess = () => resolve(r.result);
+      r.onsuccess = () => {
+        // Отпускаем базу, если её обновляет более новая версия приложения в другой вкладке.
+        r.result.onversionchange = () => r.result.close();
+        resolve(r.result);
+      };
       r.onerror = () => reject(r.error);
     });
   }

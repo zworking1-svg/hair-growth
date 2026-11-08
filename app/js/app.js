@@ -4,6 +4,8 @@ import { buildIcs } from './ics.js';
 import { buildReport, parseHairlog, ZONES, KINDS, SCORE_LABELS } from './report.js';
 import { prepareImage, blobToDataUrl, dataUrlToBlob } from './images.js';
 import { ZONE_LIST, ZONE_BY_ID, COMMON_RATE } from './zones-data.js';
+import { PHOTO_GUIDE, STYLES, GENERAL_RULES, LONG_HAIR_NOTES } from './photo-guide.js';
+import { DEFAULT_TRANSPLANT, STAGES, TRANSPLANT_FACTS, monthsSince, stageFor, zoneExpectation } from './transplant.js';
 
 // ---------- утилиты ----------
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -73,10 +75,12 @@ const state = {
   aiSel: null,
   pendingPhotos: [],
   zone3d: 'vertex',
+  transplant: structuredClone(DEFAULT_TRANSPLANT),
 };
 
 async function loadAll() {
-  const [items, logs, photos, analyses] = await Promise.all(STORES.map((s) => db.all(s)));
+  const [items, logs, photos, analyses, meta] = await Promise.all(STORES.map((s) => db.all(s)));
+  state.transplant = meta.find((m) => m.key === 'transplant') || structuredClone(DEFAULT_TRANSPLANT);
   state.items = items.sort((a, b) => (a.created || '').localeCompare(b.created || ''));
   state.logs = new Map(logs.map((l) => [l.key, l]));
   state.photos = photos.sort((a, b) => b.date.localeCompare(a.date) || b.created.localeCompare(a.created));
@@ -350,14 +354,29 @@ function viewPhotos() {
           <img src="${photoUrl(p)}" alt="" loading="lazy"><span>${esc(ZONES[p.zone])}</span>
         </button>`).join('')}</div>`).join('') : `
       <div class="empty"><div class="empty-ico">📸</div><p>Фото пока нет.</p></div>`}
-    <details class="card info"><summary>Как фотографировать, чтобы ИИ видел прогресс</summary>
-      <ul>
-        <li>Одно и то же место и свет (лучше дневной у окна или та же лампа), без вспышки.</li>
-        <li>Сухие, чистые волосы без укладки и средств.</li>
-        <li>Одинаковое расстояние и угол: макушка — сверху, линия роста — лоб прямо и под 45°.</li>
-        <li>Пробор в одном и том же месте. Снимайте раз в 2–4 недели — рост медленный.</li>
-      </ul>
-    </details>`;
+    ${photoGuideHtml()}`;
+}
+
+function guideCard(zone) {
+  const g = PHOTO_GUIDE[zone];
+  if (!g) return '';
+  return `<dl class="guide">
+    <dt>📱 Камера</dt><dd>${esc(g.camera)}</dd>
+    <dt>✋ Как держать</dt><dd>${esc(g.hold)}</dd>
+    <dt>🙂 Голова</dt><dd>${esc(g.head)}</dd>
+    <dt>💇 Укладка</dt><dd>${esc(g.styling)}</dd>
+    <dt>💡 Совет</dt><dd>${esc(g.tips)}</dd>
+  </dl>`;
+}
+
+function photoGuideHtml() {
+  const list = (arr) => `<ul>${arr.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`;
+  return `
+    <h3 class="section">Как фотографировать в ванной</h3>
+    <details class="card info"><summary>Общие правила (прочитайте один раз)</summary>${list(GENERAL_RULES)}</details>
+    <details class="card info"><summary>Длинные волосы и стрижка</summary>${list(LONG_HAIR_NOTES)}</details>
+    ${Object.entries(ZONES).filter(([k]) => k !== 'other').map(([k, l]) => `
+      <details class="card"><summary>${esc(l)} <span class="muted small">· ${esc(STYLES[PHOTO_GUIDE[k].style])}</span></summary>${guideCard(k)}</details>`).join('')}`;
 }
 
 async function onPhotosPicked(files) {
@@ -382,8 +401,10 @@ async function onPhotosPicked(files) {
       <div class="field"><div class="field-label">Зона</div>
         <div class="seg wrap">${Object.entries(ZONES).map(([k, l], i) => `<label><input type="radio" name="zone" value="${k}" ${i === 0 ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
       </div>
+      <label>Укладка на снимке<select name="style" id="photo-style">${Object.entries(STYLES).map(([k, l]) => `<option value="${k}" ${k === PHOTO_GUIDE.hairline.style ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      <details class="card info small-guide"><summary>Как снимать эту зону</summary><div id="photo-guide">${guideCard('hairline')}</div></details>
       <label>Дата снимка<input type="date" name="date" value="${state.pendingPhotos[0].date}" max="${today()}"></label>
-      <label>Заметка<input name="note" placeholder="после душа, свет у окна…"></label>
+      <label>Заметка<input name="note" placeholder="длина волос ~5 см, 3 дня после мытья…"></label>
       <button class="btn primary wide" type="submit">Сохранить</button>
     </form>`);
 }
@@ -391,7 +412,7 @@ async function onPhotosPicked(files) {
 async function submitPhotos(form) {
   const f = new FormData(form);
   for (const p of state.pendingPhotos) {
-    const rec = { id: uid(), created: new Date().toISOString(), date: f.get('date') || p.date, zone: f.get('zone'), note: f.get('note').trim(), blob: p.blob, thumb: p.thumb };
+    const rec = { id: uid(), created: new Date().toISOString(), date: f.get('date') || p.date, zone: f.get('zone'), style: f.get('style'), note: f.get('note').trim(), blob: p.blob, thumb: p.thumb };
     await db.put('photos', rec);
     state.photos.push(rec);
   }
@@ -408,7 +429,7 @@ function showPhoto(id) {
   openSheet(`
     <img class="full" src="${photoUrl(p, 'blob')}" alt="">
     <h2>${esc(ZONES[p.zone])}</h2>
-    <p class="muted">${esc(fmtDay(p.date, { day: 'numeric', month: 'long', year: 'numeric' }))}${p.note ? ' · ' + esc(p.note) : ''}</p>
+    <p class="muted">${esc(fmtDay(p.date, { day: 'numeric', month: 'long', year: 'numeric' }))}${p.style ? ' · ' + esc(STYLES[p.style]) : ''}${p.note ? ' · ' + esc(p.note) : ''}</p>
     <div class="row2">
       <button class="btn" data-act="compare" data-id="${p.id}">⇆ Сравнить</button>
       <button class="btn danger" data-act="del-photo" data-id="${p.id}">Удалить</button>
@@ -448,9 +469,85 @@ function viewZones() {
   return `
     <div id="z3d-slot"></div>
     <div class="chips-scroll">${ZONE_LIST.map((z) => `
-      <button class="chip-btn zone-chip ${z.id === state.zone3d ? 'on' : ''}" data-act="z3d-zone" data-id="${z.id}" style="--zc:${z.color}"><i></i>${esc(z.name)}</button>`).join('')}</div>
+      <button class="chip-btn zone-chip ${z.id === state.zone3d ? 'on' : ''}" data-act="z3d-zone" data-id="${z.id}" style="--zc:${z.color}"><i></i>${esc(z.name)}${zoneRole(z.id) ? ` <small>${zoneRole(z.id) === 'tx' ? '✦' : '◇'}</small>` : ''}</button>`).join('')}</div>
+    ${transplantCard()}
     <div class="card zone-info" id="zone-info">${zoneInfo(state.zone3d)}</div>
     <details class="card info"><summary>Как быстро растут волосы</summary><p>${esc(COMMON_RATE)}</p></details>`;
+}
+
+// 'tx' — зона пересадки, 'donor' — донорская, null — не затронута.
+function zoneRole(id) {
+  const tp = state.transplant;
+  if (tp?.zones?.includes(id)) return 'tx';
+  if (tp?.donor?.includes(id)) return 'donor';
+  return null;
+}
+
+function transplantCard() {
+  const tp = state.transplant;
+  const m = monthsSince(tp.date);
+  const st = stageFor(m);
+  const max = 18;
+  const marks = STAGES.filter((s) => s.from > 0).map((s) => `<i style="left:${(s.from / max) * 100}%"></i>`).join('');
+  const cut = tp.haircuts?.length
+    ? `Последняя стрижка: ${esc(fmtDay([...tp.haircuts].sort((a, b) => b.date.localeCompare(a.date))[0].date, { day: 'numeric', month: 'long' }))}`
+    : 'С пересадки не стриглись';
+  return `
+    <div class="card tx">
+      <div class="tx-head">
+        <div><h3>Моя пересадка</h3>
+          <div class="muted small">${esc(fmtDay(tp.date, { day: 'numeric', month: 'long', year: 'numeric' }))} · ${tp.grafts || '?'} графтов · ${esc(tp.method || '')}</div></div>
+        <button class="btn small" data-act="tx-edit">Изменить</button>
+      </div>
+      <div class="tx-month"><b>${m.toFixed(1)}</b> мес. · этап «${esc(st.name)}»${st.pct ? ` · обычно ${st.pct[0]}–${st.pct[1]}% роста во лбу` : ''}</div>
+      <div class="tx-bar"><div style="width:${Math.min(100, (m / max) * 100)}%"></div>${marks}</div>
+      <div class="tx-scale muted small"><span>0</span><span>6</span><span>12</span><span>18 мес.</span></div>
+      <p>${esc(st.text)}</p>
+      <div class="muted small">Сейчас нормально:</div>
+      <ul>${st.normal.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+      <p class="muted small">${cut}${tp.zones?.length ? '' : ' · <b>Отметьте зоны пересадки</b> в «Изменить» — тогда для каждой зоны будет свой срок.'}</p>
+      <details><summary>Что важно знать после пересадки 5500 графтов</summary>
+        <ul>${TRANSPLANT_FACTS.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+      </details>
+      <details><summary>Все этапы по месяцам</summary>
+        ${STAGES.map((s) => `<p class="${s === st ? 'tx-now' : ''}"><b>${s.from}–${s.to} мес. · ${esc(s.name)}.</b> ${esc(s.text)}</p>`).join('')}
+      </details>
+    </div>`;
+}
+
+function transplantForm() {
+  const tp = state.transplant;
+  const chips = (name, sel) => ZONE_LIST.map((z) => `<label><input type="checkbox" name="${name}" value="${z.id}" ${sel?.includes(z.id) ? 'checked' : ''}><span>${esc(z.name)}</span></label>`).join('');
+  const cuts = [...(tp.haircuts || [])].sort((a, b) => b.date.localeCompare(a.date));
+  openSheet(`
+    <h2>Моя пересадка</h2>
+    <form id="tx-form">
+      <div class="row2">
+        <label>Дата операции<input type="date" name="date" required value="${esc(tp.date)}"></label>
+        <label>Графтов<input type="number" name="grafts" min="0" step="50" value="${esc(tp.grafts)}"></label>
+      </div>
+      <label>Метод<select name="method">${['FUE', 'DHI', 'FUT', 'Другой'].map((x) => `<option ${x === tp.method ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+      <div class="field"><div class="field-label">Куда пересаживали</div><div class="seg wrap">${chips('zones', tp.zones)}</div></div>
+      <div class="field"><div class="field-label">Откуда брали (донор)</div><div class="seg wrap">${chips('donor', tp.donor)}</div></div>
+      <button class="btn primary wide" type="submit">Сохранить</button>
+    </form>
+    <h3 class="section">Стрижки после пересадки</h3>
+    <div class="list">${cuts.map((c) => `<div class="dose"><div class="dose-main"><div class="dose-name">${esc(fmtDay(c.date, { day: 'numeric', month: 'long', year: 'numeric' }))}</div><div class="dose-sub">${esc(c.note || '')}</div></div>
+      <button class="icon-btn small" data-act="tx-cut-del" data-date="${esc(c.date)}" aria-label="Удалить">✕</button></div>`).join('') || '<p class="muted">Пока не стриглись.</p>'}</div>
+    <form id="cut-form">
+      <div class="row2">
+        <label>Дата<input type="date" name="date" required value="${today()}"></label>
+        <label>Что сделали<select name="note">
+          <option>Подровнял зону пересадки</option><option>Стрижка всей головы</option><option>Машинка по бокам и донору</option><option>Короткая стрижка</option>
+        </select></label>
+      </div>
+      <button class="btn wide" type="submit">+ Отметить стрижку</button>
+    </form>`);
+}
+
+async function saveTransplant() {
+  await db.put('meta', state.transplant);
+  render();
 }
 
 function zoneInfo(id) {
@@ -473,12 +570,33 @@ function zoneInfo(id) {
     <h3>Скорость роста</h3><p>${esc(z.rate)}</p>
     <h3>Почему здесь растёт быстрее или медленнее</h3>${list(z.why)}
     <h3>Как ускорить рост в этой зоне</h3>${list(z.boost)}
-    <h3>При пересадке</h3><p>${esc(z.transplant)}</p>
+    ${zoneTxSection(z)}
+    <h3>Как фотографировать в ванной</h3>
+    <p class="muted small">Укладка: <b>${esc(STYLES[PHOTO_GUIDE[z.photoZone].style])}</b></p>
+    ${guideCard(z.photoZone)}
+    <h3>Как планируют при пересадке</h3><p>${esc(z.transplant)}</p>
     <div class="zi-mine">
       <div><b>Ваши данные</b><div class="muted small">Фото этой зоны: ${photos}${ai ? ` · оценка ИИ ${ai.scores[z.aiKey]}/10 от ${esc(ai.date)}` : ''}</div></div>
       <button class="btn small" data-act="z3d-photos" data-zone="${z.photoZone}">Фото</button>
     </div>
     <p class="muted small">Лекарства и процедуры — только после консультации с врачом.</p>`;
+}
+
+function zoneTxSection(z) {
+  const role = zoneRole(z.id);
+  const m = monthsSince(state.transplant.date);
+  if (role === 'tx') {
+    const e = zoneExpectation(z.id, m);
+    return `<div class="tx-zone" style="--zc:${z.color}">
+      <h3>✦ Ваша зона пересадки · ${m.toFixed(1)} мес.</h3>
+      <p><b>Чего ждать сейчас:</b> ${e.pct ? `обычно ${e.pct} волос` : 'рост ещё только начинается'} (этап «${esc(e.stage.name)}»${e.lag ? `, зона отстаёт от лба примерно на ${e.lag} мес.` : ''}).</p>
+      <p>${esc(z.afterTx)}</p>
+    </div>`;
+  }
+  if (role === 'donor') {
+    return `<div class="tx-zone" style="--zc:${z.color}"><h3>◇ Ваша донорская зона</h3><p>${esc(z.afterTx)}</p></div>`;
+  }
+  return `<h3>После пересадки</h3><p>${esc(z.afterTx)}</p>`;
 }
 
 function stageEl() {
@@ -624,7 +742,7 @@ function lineChart(list) {
 
 function aiPayload() {
   const photos = state.photos.filter((p) => state.aiSel.has(p.id)).sort((a, b) => a.date.localeCompare(b.date));
-  const text = buildReport({ items: state.items, logs: state.logs, photos, analyses: state.analyses });
+  const text = buildReport({ items: state.items, logs: state.logs, photos, analyses: state.analyses, transplant: state.transplant });
   return { photos, text };
 }
 
@@ -773,7 +891,7 @@ async function exportData(withPhotos) {
   const photos = withPhotos
     ? await Promise.all(state.photos.map(async (p) => ({ ...p, blob: await blobToDataUrl(p.blob), thumb: await blobToDataUrl(p.thumb) })))
     : [];
-  const data = { app: 'hairgrowth', version: 1, exported: new Date().toISOString(), items: state.items, logs: [...state.logs.values()], analyses: state.analyses, photos };
+  const data = { app: 'hairgrowth', version: 1, exported: new Date().toISOString(), items: state.items, logs: [...state.logs.values()], analyses: state.analyses, meta: [state.transplant], photos };
   await shareOrDownload(new File([JSON.stringify(data)], `hairgrowth-${today()}.json`, { type: 'application/json' }));
 }
 
@@ -783,7 +901,7 @@ async function importData(file) {
     if (data.app !== 'hairgrowth') throw new Error('Это не копия приложения «Рост волос»');
     const keepPhotos = !data.photos?.length;
     if (!confirm(`Заменить текущие данные копией от ${data.exported?.slice(0, 10)}?${keepPhotos ? ' Фото в копии нет — текущие фото останутся.' : ''}`)) return;
-    for (const s of ['items', 'logs', 'analyses']) {
+    for (const s of ['items', 'logs', 'analyses', 'meta']) {
       await db.clear(s);
       for (const r of data[s] || []) await db.put(s, r);
     }
@@ -894,6 +1012,12 @@ const actions = {
     render();
   },
   period: (el) => { state.period = el.dataset.period === 'all' ? 'all' : Number(el.dataset.period); render(); },
+  'tx-edit': transplantForm,
+  'tx-cut-del': async (el) => {
+    state.transplant.haircuts = state.transplant.haircuts.filter((c) => c.date !== el.dataset.date);
+    await saveTransplant();
+    transplantForm();
+  },
   'z3d-zone': (el) => selectZone(el.dataset.id),
   'z3d-photos': (el) => { state.zone = el.dataset.zone; actions.tab({ dataset: { tab: 'photos' } }); },
   'z3d-rotate': (el) => { if (zoneScene) { zoneScene.setAutoRotate(!zoneScene.autoRotate); el.classList.toggle('off', !zoneScene.autoRotate); } },
@@ -924,6 +1048,10 @@ document.addEventListener('change', (e) => {
   if (t.matches('[data-photo-input]')) { onPhotosPicked([...t.files]); t.value = ''; }
   else if (t.matches('[data-import]')) { importData(t.files[0]); t.value = ''; }
   else if (t.id === 'mode') syncModeFields();
+  else if (t.name === 'zone' && t.closest('#photo-form')) {
+    $('#photo-style').value = PHOTO_GUIDE[t.value].style;
+    $('#photo-guide').innerHTML = guideCard(t.value);
+  }
   else if (t.id === 'cmp-a' || t.id === 'cmp-b') {
     const p = state.photos.find((x) => x.id === t.value);
     $(t.id === 'cmp-a' ? '#cmp-img-a' : '#cmp-img-b').src = photoUrl(p, 'blob');
@@ -942,6 +1070,22 @@ document.addEventListener('submit', (e) => {
   e.preventDefault();
   if (e.target.id === 'item-form') submitItem(e.target);
   if (e.target.id === 'photo-form') submitPhotos(e.target);
+  if (e.target.id === 'tx-form') {
+    const f = new FormData(e.target);
+    Object.assign(state.transplant, {
+      date: f.get('date'), grafts: Number(f.get('grafts')) || 0, method: f.get('method'),
+      zones: f.getAll('zones'), donor: f.getAll('donor'),
+    });
+    closeSheet();
+    saveTransplant();
+    toast('Сохранено');
+  }
+  if (e.target.id === 'cut-form') {
+    const f = new FormData(e.target);
+    state.transplant.haircuts = [...(state.transplant.haircuts || []), { date: f.get('date'), note: f.get('note') }];
+    saveTransplant().then(transplantForm);
+    toast('Стрижка отмечена — первая съёмка после неё станет новой точкой отсчёта');
+  }
 });
 
 $('#sheet').addEventListener('click', (e) => { if (e.target.id === 'sheet') closeSheet(); });

@@ -1,14 +1,10 @@
 // Подготовка отчёта для ИИ-трихолога (Claude) и разбор его ответа.
 import { ymd, addDays, computeStats, versionFor, describeSchedule, daysBetween, RATING_LABELS } from './schedule.js';
+import { PHOTO_ZONES, STYLES } from './photo-guide.js';
+import { monthsSince, stageFor, zoneExpectation } from './transplant.js';
+import { ZONE_BY_ID } from './zones-data.js';
 
-export const ZONES = {
-  crown: 'Макушка',
-  hairline: 'Линия роста (лоб)',
-  part: 'Пробор',
-  temples: 'Виски',
-  back: 'Затылок',
-  other: 'Другое',
-};
+export const ZONES = PHOTO_ZONES;
 
 export const KINDS = { oral: 'внутрь', topical: 'наружно', procedure: 'процедура' };
 
@@ -21,7 +17,27 @@ export const SCORE_LABELS = {
 
 const pct = (x) => (x == null ? '—' : Math.round(x * 100) + '%');
 
-export function buildReport({ items, logs, photos, analyses, now = new Date() }) {
+function transplantLines(tp, now) {
+  if (!tp?.date) return [];
+  const m = monthsSince(tp.date, now);
+  const st = stageFor(m);
+  const names = (ids) => ids.map((id) => ZONE_BY_ID[id]?.name || id).join(', ') || 'не указаны';
+  const lines = ['', 'Пересадка волос:'];
+  lines.push(`- Дата: ${tp.date}, прошло ${m.toFixed(1)} мес. (этап «${st.name}»)`);
+  lines.push(`- Графтов: ${tp.grafts || '?'}, метод: ${tp.method || '?'}`);
+  lines.push(`- Зоны пересадки: ${names(tp.zones || [])}`);
+  lines.push(`- Донорские зоны: ${names(tp.donor || [])}`);
+  for (const id of tp.zones || []) {
+    const e = zoneExpectation(id, m);
+    lines.push(`  · ${ZONE_BY_ID[id]?.name}: эффективный срок ${e.effMonths.toFixed(1)} мес., ожидаемо ${e.pct || 'рост ещё не начался'}`);
+  }
+  const cuts = [...(tp.haircuts || [])].sort((a, b) => a.date.localeCompare(b.date));
+  if (cuts.length) lines.push(`- Стрижки после пересадки: ${cuts.map((c) => `${c.date}${c.note ? ' (' + c.note + ')' : ''}`).join('; ')}`);
+  else lines.push('- Волосы в зоне пересадки НЕ стриглись с момента операции (длинные, неравной длины).');
+  return lines;
+}
+
+export function buildReport({ items, logs, photos, analyses, transplant, now = new Date() }) {
   const today = ymd(now);
   const from = addDays(today, -29);
   const st = computeStats(items, logs, from, today, now);
@@ -33,9 +49,12 @@ export function buildReport({ items, logs, photos, analyses, now = new Date() })
   const starts = items.map((i) => i.startDate).sort();
   if (starts.length) lines.push(`Уход начат: ${starts[0]} (${daysBetween(starts[0], today)} дн. назад)`);
 
-  lines.push('', `Фото во вложении (${photos.length}), по порядку:`);
+  lines.push(...transplantLines(transplant, now));
+
+  lines.push('', `Фото во вложении (${photos.length}), по порядку. Снято в ванной при верхнем свете, на сухих волосах:`);
   photos.forEach((p, i) => {
-    lines.push(`${i + 1}. ${p.date} — ${ZONES[p.zone] || p.zone}${p.note ? ' (' + p.note + ')' : ''}`);
+    const style = p.style ? `; укладка: ${STYLES[p.style] || p.style}` : '';
+    lines.push(`${i + 1}. ${p.date} — ${ZONES[p.zone] || p.zone}${style}${p.note ? '; ' + p.note : ''}`);
   });
 
   lines.push('', 'Текущая схема:');

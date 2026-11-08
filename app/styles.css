@@ -339,6 +339,29 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   margin: 16px 0 8px; padding: 12px; border-radius: 14px; background: var(--accent-soft);
 }
 
+/* пересадка */
+.tx-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.tx-head h3 { margin: 0 0 2px; }
+.tx-month { margin: 12px 0 6px; font-size: 15px; }
+.tx-month b { font-size: 26px; letter-spacing: -.02em; }
+.tx-bar { position: relative; height: 10px; border-radius: 99px; background: var(--r0); overflow: hidden; }
+.tx-bar > div { height: 100%; border-radius: 99px; background: linear-gradient(90deg, #4cc9f0, var(--accent)); }
+.tx-bar i { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--card); opacity: .8; }
+.tx-scale { display: flex; justify-content: space-between; margin: 4px 0 8px; }
+.tx ul { padding-left: 20px; margin: 4px 0 8px; font-size: 14px; }
+.tx details { margin-top: 8px; }
+.tx details p, .tx details li { font-size: 14px; }
+.tx-now { background: var(--accent-soft); border-radius: 8px; padding: 6px 8px; }
+.tx-zone { margin: 14px 0 4px; padding: 12px 14px; border-radius: 14px; border-left: 4px solid var(--zc); background: color-mix(in srgb, var(--zc) 12%, transparent); }
+.tx-zone h3 { margin-top: 0; }
+.zone-chip small { font-size: 12px; }
+dl.guide { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; margin: 10px 0 0; font-size: 14px; }
+dl.guide dt { font-weight: 700; white-space: nowrap; }
+dl.guide dd { margin: 0; }
+details.card > summary { padding: 2px 0; }
+.small-guide { margin: 0; padding: 12px 14px; }
+@media (max-width: 380px) { dl.guide { grid-template-columns: 1fr; } dl.guide dd { margin-bottom: 6px; } }
+
 /* навигация */
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;

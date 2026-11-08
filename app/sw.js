@@ -1,9 +1,9 @@
 // Офлайн-кэш оболочки приложения. При изменении файлов увеличьте VERSION.
-const VERSION = 'hg-v2';
+const VERSION = 'hg-v3';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'js/app.js', 'js/db.js', 'js/schedule.js', 'js/ics.js', 'js/report.js', 'js/images.js',
-  'js/zones-data.js', 'js/zones3d.js',
+  'js/zones-data.js', 'js/zones3d.js', 'js/photo-guide.js', 'js/transplant.js',
   'vendor/three/build/three.module.js', 'vendor/three/build/three.core.js',
   'vendor/three/addons/controls/OrbitControls.js', 'vendor/three/addons/environments/RoomEnvironment.js',
   'vendor/three/addons/postprocessing/EffectComposer.js', 'vendor/three/addons/postprocessing/RenderPass.js',
@@ -31,7 +31,8 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(req)
+    // no-cache: всегда сверяться с сервером (ETag), чтобы модули не смешивались из разных версий
+    fetch(req, { cache: 'no-cache' })
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();
