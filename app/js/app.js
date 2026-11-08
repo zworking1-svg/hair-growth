@@ -16,7 +16,7 @@ const today = () => S.ymd(new Date());
 const hm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 const pct = (x) => (x == null ? '—' : Math.round(x * 100) + '%');
 const KIND_ICON = { oral: '💊', topical: '🧴', procedure: '✨' };
-const APP_VERSION = '1.3 · 8 ноября 2026';
+const APP_VERSION = '1.4 · 8 ноября 2026';
 
 function fmtDay(date, opts = { weekday: 'long', day: 'numeric', month: 'long' }) {
   return S.parseYmd(date).toLocaleDateString('ru-RU', opts);
@@ -219,6 +219,7 @@ function viewPlan() {
           <div class="item-name">${esc(it.name)}</div>
           <div class="muted">${esc(v.dose || 'доза не указана')} · ${esc(KINDS[it.kind])}</div>
           <div class="item-times">${v.times.map((x) => `<span class="chip">${esc(x)}</span>`).join('')} <span class="muted">${esc(S.describeSchedule(v))}</span></div>
+          <div class="muted small">${esc(remindLabel(it))}</div>
           ${it.endDate ? `<div class="muted small">до ${esc(fmtDay(it.endDate, { day: 'numeric', month: 'long' }))}</div>` : ''}
         </div>
         <div class="chev">›</div>
@@ -269,6 +270,14 @@ function itemForm(it) {
         </div>
         <label data-show="interval">Каждые N дней<input type="number" name="interval" min="2" max="60" value="${esc(v.interval || 2)}"></label>
       </div>
+      <div class="field">
+        <div class="field-label">🔔 Напоминание</div>
+        <div class="row2">
+          <label>Когда напомнить<select name="remBefore">${REMIND_BEFORE.map(([val, l]) => `<option value="${val}" ${String(val) === String(remind(it).before) ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+          <label>Второе напоминание<select name="remAgain">${REMIND_AGAIN.map(([val, l]) => `<option value="${val}" ${val === remind(it).again ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        </div>
+        <p class="muted small">Действует для каждого времени приёма. После изменения снова нажмите «Добавить напоминания в Календарь».</p>
+      </div>
       <div class="row2">
         <label>Начало<input type="date" name="startDate" required value="${esc(it?.startDate || t)}"></label>
         <label>Окончание<input type="date" name="endDate" value="${esc(it?.endDate || '')}"></label>
@@ -281,6 +290,25 @@ function itemForm(it) {
       </div>` : ''}
     </form>`);
   syncModeFields();
+}
+
+// Когда напоминать относительно времени приёма (минуты до) и повтор (минуты после).
+const REMIND_BEFORE = [
+  ['off', 'Не напоминать'], [0, 'Ровно во время приёма'], [5, 'За 5 минут'], [10, 'За 10 минут'], [15, 'За 15 минут'],
+  [20, 'За 20 минут'], [30, 'За 30 минут'], [45, 'За 45 минут'], [60, 'За 1 час'], [90, 'За 1,5 часа'], [120, 'За 2 часа'],
+];
+const REMIND_AGAIN = [[0, 'Не нужно'], [10, 'Через 10 минут'], [15, 'Через 15 минут'], [30, 'Через 30 минут'], [60, 'Через 1 час'], [120, 'Через 2 часа']];
+
+function remind(it) {
+  const r = it?.remind || { before: 0, again: 0 };
+  return { before: r.before === null ? 'off' : r.before ?? 0, again: r.again || 0 };
+}
+
+function remindLabel(it) {
+  const r = remind(it);
+  if (r.before === 'off') return '🔕 без напоминания';
+  const first = REMIND_BEFORE.find(([v]) => v === r.before)?.[1].toLowerCase() || '';
+  return `🔔 ${first}${r.again ? ` + повтор через ${r.again} мин` : ''}`;
 }
 
 function timeRow(v) {
@@ -304,6 +332,10 @@ async function submitItem(form) {
     name: f.get('name').trim(),
     kind: f.get('kind'),
     notes: f.get('notes').trim(),
+    remind: {
+      before: f.get('remBefore') === 'off' ? null : Number(f.get('remBefore')),
+      again: Number(f.get('remAgain')) || 0,
+    },
     startDate: f.get('startDate'),
     endDate: f.get('endDate') || null,
   };
@@ -757,7 +789,7 @@ function lineChart(list) {
 
 function aiPayload() {
   const photos = state.photos.filter((p) => state.aiSel.has(p.id)).sort((a, b) => a.date.localeCompare(b.date));
-  const text = buildReport({ items: state.items, logs: state.logs, photos, analyses: state.analyses, transplant: state.transplant });
+  const text = buildReport({ items: state.items, logs: state.logs, photos, allPhotos: state.photos, analyses: state.analyses, transplant: state.transplant });
   return { photos, text };
 }
 

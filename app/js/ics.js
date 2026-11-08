@@ -39,6 +39,9 @@ export function buildIcs(items, appUrl, now = new Date()) {
 
   for (const item of items) {
     if (item.endDate && item.endDate < today) continue;
+    const before = item.remind ? item.remind.before : 0; // null — напоминания выключены
+    if (before === null) continue;
+    const again = item.remind?.again || 0;
     // Первая дата, когда приём действительно запланирован (важно для режима «раз в N дней»).
     let first = item.startDate > today ? item.startDate : today;
     let guard = 0;
@@ -69,9 +72,16 @@ export function buildIcs(items, appUrl, now = new Date()) {
         appUrl ? `URL:${appUrl}` : null,
         'BEGIN:VALARM',
         'ACTION:DISPLAY',
-        'TRIGGER:PT0S',
-        `DESCRIPTION:${escapeText(title)}`,
+        before ? `TRIGGER:-PT${before}M` : 'TRIGGER:PT0S',
+        `DESCRIPTION:${escapeText(before ? `${title} — через ${before} мин` : title)}`,
         'END:VALARM',
+        ...(again ? [
+          'BEGIN:VALARM',
+          'ACTION:DISPLAY',
+          `TRIGGER:PT${again}M`,
+          `DESCRIPTION:${escapeText(`Не забыли? ${title}`)}`,
+          'END:VALARM',
+        ] : []),
         'END:VEVENT',
       );
     }
