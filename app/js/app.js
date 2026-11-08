@@ -3,6 +3,7 @@ import * as S from './schedule.js';
 import { buildIcs } from './ics.js';
 import { buildReport, parseHairlog, ZONES, KINDS, SCORE_LABELS } from './report.js';
 import { prepareImage, blobToDataUrl, dataUrlToBlob } from './images.js';
+import { ZONE_LIST, ZONE_BY_ID, COMMON_RATE } from './zones-data.js';
 
 // ---------- утилиты ----------
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -71,6 +72,7 @@ const state = {
   zone: 'all',
   aiSel: null,
   pendingPhotos: [],
+  zone3d: 'vertex',
 };
 
 async function loadAll() {
@@ -82,14 +84,16 @@ async function loadAll() {
 }
 
 // ---------- отрисовка ----------
-const TITLES = { today: 'Сегодня', plan: 'Схема ухода', photos: 'Фото', ai: 'ИИ-трихолог', stats: 'Аналитика' };
+const TITLES = { today: 'Сегодня', plan: 'Схема ухода', photos: 'Фото', zones: 'Карта зон', ai: 'ИИ-трихолог', stats: 'Аналитика' };
 
 function render() {
   $('#title').textContent = TITLES[state.tab];
   $$('.tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === state.tab));
-  const views = { today: viewToday, plan: viewPlan, photos: viewPhotos, ai: viewAi, stats: viewStats };
+  const views = { today: viewToday, plan: viewPlan, photos: viewPhotos, zones: viewZones, ai: viewAi, stats: viewStats };
   $('#view').innerHTML = views[state.tab]();
   updateBadge();
+  if (state.tab === 'zones') mountZones();
+  else zoneScene?.pause();
 }
 
 function updateBadge() {
@@ -431,6 +435,117 @@ function showCompare(id) {
       <span class="cmp-tag l">до</span><span class="cmp-tag r">после</span>
     </div>
     <input type="range" id="cmp-range" min="0" max="100" value="50" aria-label="Положение шторки">`);
+}
+
+// ----- 3D-карта зон -----
+// Сцена создаётся один раз (three.js грузится только при первом открытии вкладки)
+// и переносится между перерисовками, чтобы не пересоздавать WebGL-контекст.
+let zoneStage = null;
+let zoneScene = null;
+let zoneMounting = null;
+
+function viewZones() {
+  return `
+    <div id="z3d-slot"></div>
+    <div class="chips-scroll">${ZONE_LIST.map((z) => `
+      <button class="chip-btn zone-chip ${z.id === state.zone3d ? 'on' : ''}" data-act="z3d-zone" data-id="${z.id}" style="--zc:${z.color}"><i></i>${esc(z.name)}</button>`).join('')}</div>
+    <div class="card zone-info" id="zone-info">${zoneInfo(state.zone3d)}</div>
+    <details class="card info"><summary>Как быстро растут волосы</summary><p>${esc(COMMON_RATE)}</p></details>`;
+}
+
+function zoneInfo(id) {
+  const z = ZONE_BY_ID[id];
+  const photos = state.photos.filter((p) => p.zone === z.photoZone).length;
+  const ai = z.aiKey && state.analyses.find((a) => typeof a.scores?.[z.aiKey] === 'number');
+  const list = (arr) => `<ul>${arr.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`;
+  return `
+    <div class="zi-head" style="--zc:${z.color}">
+      <span class="zi-dot"></span>
+      <div><h2>${esc(z.name)}</h2><div class="muted small">${esc(z.en)} · ${esc(z.norwood)}</div></div>
+    </div>
+    <p>${esc(z.where)}</p>
+    <div class="zi-stats" style="--zc:${z.color}">
+      <div><span>Чувствительность к ДГТ</span><div class="meter">${[1, 2, 3, 4, 5].map((i) => `<i class="${i <= z.dht ? 'on' : ''}"></i>`).join('')}</div></div>
+      <div><span>Через 12 мес. без лечения</span><div class="progress"><div style="width:${Math.round(z.growth.no * 100)}%"></div></div></div>
+      <div><span>Через 12 мес. с лечением</span><div class="progress"><div style="width:${Math.round(z.growth.tx * 100)}%"></div></div></div>
+    </div>
+    <p class="muted small">Полосы — наглядная модель густоты при андрогенетической алопеции, не измерения.</p>
+    <h3>Скорость роста</h3><p>${esc(z.rate)}</p>
+    <h3>Почему здесь растёт быстрее или медленнее</h3>${list(z.why)}
+    <h3>Как ускорить рост в этой зоне</h3>${list(z.boost)}
+    <h3>При пересадке</h3><p>${esc(z.transplant)}</p>
+    <div class="zi-mine">
+      <div><b>Ваши данные</b><div class="muted small">Фото этой зоны: ${photos}${ai ? ` · оценка ИИ ${ai.scores[z.aiKey]}/10 от ${esc(ai.date)}` : ''}</div></div>
+      <button class="btn small" data-act="z3d-photos" data-zone="${z.photoZone}">Фото</button>
+    </div>
+    <p class="muted small">Лекарства и процедуры — только после консультации с врачом.</p>`;
+}
+
+function stageEl() {
+  if (!zoneStage) {
+    zoneStage = document.createElement('div');
+    zoneStage.className = 'z3d';
+    zoneStage.innerHTML = `
+      <div class="z3d-label"><span></span></div>
+      <div class="z3d-loading">Загрузка 3D…</div>
+      <div class="z3d-hud">
+        <button data-act="z3d-rotate" aria-label="Автовращение">⟳</button>
+        <button data-act="z3d-home" aria-label="Общий вид">⌂</button>
+      </div>
+      <div class="z3d-grow">
+        <div class="z3d-status" id="z3d-status">Симуляция роста волос за 12 месяцев</div>
+        <div class="z3d-btns">
+          <button data-act="z3d-grow" data-mode="no">▶ Без лечения</button>
+          <button data-act="z3d-grow" data-mode="tx">▶ С лечением</button>
+          <button data-act="z3d-stop" id="z3d-stop" hidden aria-label="Остановить">✕</button>
+        </div>
+      </div>`;
+  }
+  return zoneStage;
+}
+
+function syncZoneLabel() {
+  const z = ZONE_BY_ID[state.zone3d];
+  const lbl = zoneStage?.querySelector('.z3d-label span');
+  if (lbl) { lbl.textContent = z.name; lbl.style.setProperty('--zc', z.color); }
+}
+
+async function mountZones() {
+  $('#z3d-slot')?.replaceWith(stageEl());
+  syncZoneLabel();
+  if (zoneScene) { zoneScene.start(); zoneScene.resize(); return; }
+  if (zoneMounting) return;
+  zoneMounting = (async () => {
+    try {
+      const { createZoneScene } = await import('./zones3d.js');
+      zoneScene = createZoneScene(zoneStage, { onSelect: selectZone, onGrowth: showGrowth });
+      zoneScene.select(state.zone3d, false);
+      zoneStage.querySelector('.z3d-loading').remove();
+      if (state.tab !== 'zones') zoneScene.pause();
+    } catch (e) {
+      zoneStage.querySelector('.z3d-loading').textContent = 'Не удалось запустить 3D: ' + e.message;
+    }
+  })();
+}
+
+function selectZone(id) {
+  state.zone3d = id;
+  zoneScene?.select(id);
+  syncZoneLabel();
+  const info = $('#zone-info');
+  if (info) info.innerHTML = zoneInfo(id);
+  $$('.zone-chip').forEach((b) => {
+    b.classList.toggle('on', b.dataset.id === id);
+    if (b.dataset.id === id) b.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  });
+}
+
+function showGrowth(g) {
+  const st = $('#z3d-status');
+  if (!st) return;
+  $('#z3d-stop').hidden = !g;
+  if (!g) { st.textContent = 'Симуляция роста волос за 12 месяцев'; return; }
+  st.textContent = `${g.mode === 'tx' ? 'С лечением' : 'Без лечения'} · месяц ${g.month} из 12${g.done ? ' — сравните зоны' : ''}`;
 }
 
 // ----- ИИ-трихолог -----
@@ -779,6 +894,12 @@ const actions = {
     render();
   },
   period: (el) => { state.period = el.dataset.period === 'all' ? 'all' : Number(el.dataset.period); render(); },
+  'z3d-zone': (el) => selectZone(el.dataset.id),
+  'z3d-photos': (el) => { state.zone = el.dataset.zone; actions.tab({ dataset: { tab: 'photos' } }); },
+  'z3d-rotate': (el) => { if (zoneScene) { zoneScene.setAutoRotate(!zoneScene.autoRotate); el.classList.toggle('off', !zoneScene.autoRotate); } },
+  'z3d-home': () => zoneScene?.resetView(),
+  'z3d-grow': (el) => zoneScene?.startGrowth(el.dataset.mode),
+  'z3d-stop': () => zoneScene?.stopGrowth(),
   settings: showSettings,
   export: (el) => exportData(el.dataset.photos === '1'),
   wipe: async () => {

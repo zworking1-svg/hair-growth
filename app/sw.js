@@ -1,8 +1,16 @@
 // Офлайн-кэш оболочки приложения. При изменении файлов увеличьте VERSION.
-const VERSION = 'hg-v1';
+const VERSION = 'hg-v2';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'js/app.js', 'js/db.js', 'js/schedule.js', 'js/ics.js', 'js/report.js', 'js/images.js',
+  'js/zones-data.js', 'js/zones3d.js',
+  'vendor/three/build/three.module.js', 'vendor/three/build/three.core.js',
+  'vendor/three/addons/controls/OrbitControls.js', 'vendor/three/addons/environments/RoomEnvironment.js',
+  'vendor/three/addons/postprocessing/EffectComposer.js', 'vendor/three/addons/postprocessing/RenderPass.js',
+  'vendor/three/addons/postprocessing/UnrealBloomPass.js', 'vendor/three/addons/postprocessing/OutputPass.js',
+  'vendor/three/addons/postprocessing/ShaderPass.js', 'vendor/three/addons/postprocessing/MaskPass.js',
+  'vendor/three/addons/postprocessing/Pass.js', 'vendor/three/addons/shaders/CopyShader.js',
+  'vendor/three/addons/shaders/LuminosityHighPassShader.js', 'vendor/three/addons/shaders/OutputShader.js',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 

@@ -282,10 +282,67 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .progress { height: 8px; border-radius: 99px; background: var(--r0); margin: 6px 0 4px; overflow: hidden; }
 .progress div { height: 100%; border-radius: 99px; }
 
+/* 3D-карта зон — всегда тёмная, «игровая» сцена */
+.z3d {
+  position: relative; height: min(64vh, 560px); margin: 0 -16px 4px; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 40%, #0c1a2a, #03060b 70%); touch-action: none;
+}
+.z3d canvas { display: block; width: 100%; height: 100%; }
+.z3d-loading {
+  position: absolute; inset: 0; display: grid; place-items: center; color: #7fd4ff;
+  font-weight: 600; letter-spacing: .08em; text-transform: uppercase; font-size: 13px;
+}
+.z3d-label { position: absolute; left: 0; top: 0; pointer-events: none; transition: opacity .3s; will-change: transform; }
+.z3d-label span {
+  position: absolute; transform: translate(-50%, calc(-100% - 14px)); white-space: nowrap;
+  padding: 5px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; color: #fff;
+  background: rgba(6, 14, 24, .72); border: 1px solid var(--zc, #7fd4ff);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--zc, #7fd4ff) 55%, transparent);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.z3d-label span::after {
+  content: ''; position: absolute; left: 50%; bottom: -12px; width: 1px; height: 11px; background: var(--zc, #7fd4ff);
+}
+.z3d-hud { position: absolute; top: 10px; right: 12px; display: grid; gap: 8px; }
+.z3d-hud button, .z3d-btns button {
+  border: 1px solid rgba(127, 212, 255, .35); background: rgba(6, 14, 24, .6); color: #cfeeff;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); cursor: pointer; font-weight: 700;
+}
+.z3d-hud button { width: 38px; height: 38px; border-radius: 12px; font-size: 18px; }
+.z3d-hud button.off { opacity: .45; }
+.z3d-grow { position: absolute; left: 12px; right: 12px; bottom: 12px; display: grid; gap: 8px; }
+.z3d-status {
+  justify-self: start; font-size: 12px; font-weight: 700; color: #9fe3ff; letter-spacing: .02em;
+  text-shadow: 0 0 8px rgba(80, 200, 255, .6);
+}
+.z3d-btns { display: flex; gap: 8px; }
+.z3d-btns button { flex: 1; height: 40px; border-radius: 12px; font-size: 13px; }
+.z3d-btns button[data-act=z3d-stop] { flex: 0 0 40px; }
+.zone-chip { display: inline-flex; align-items: center; gap: 6px; }
+.zone-chip i { width: 9px; height: 9px; border-radius: 50%; background: var(--zc); box-shadow: 0 0 6px var(--zc); }
+.zone-chip.on { background: var(--zc); border-color: var(--zc); color: #0b0f14; }
+.zone-chip.on i { background: #0b0f14; box-shadow: none; }
+.zone-info h3 { margin: 16px 0 6px; font-size: 16px; }
+.zone-info p, .zone-info li { font-size: 15px; }
+.zone-info ul { padding-left: 20px; margin: 0; display: grid; gap: 6px; }
+.zi-head { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+.zi-head h2 { margin: 0; }
+.zi-dot { width: 16px; height: 16px; border-radius: 50%; flex: none; background: var(--zc); box-shadow: 0 0 12px var(--zc); }
+.zi-stats { display: grid; gap: 10px; margin: 12px 0 4px; }
+.zi-stats span { font-size: 13px; color: var(--muted); font-weight: 600; }
+.zi-stats .progress div { background: var(--zc); }
+.meter { display: flex; gap: 4px; margin-top: 5px; }
+.meter i { flex: 1; height: 8px; border-radius: 99px; background: var(--r0); }
+.meter i.on { background: var(--zc); }
+.zi-mine {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  margin: 16px 0 8px; padding: 12px; border-radius: 14px; background: var(--accent-soft);
+}
+
 /* навигация */
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-template-columns: repeat(6, 1fr);
   padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
   background: color-mix(in srgb, var(--card) 88%, transparent);
   -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
@@ -293,7 +350,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 }
 .tabbar button {
   position: relative; border: 0; background: none; display: grid; justify-items: center; gap: 1px;
-  font-size: 11px; font-weight: 600; color: var(--muted); padding: 4px 0; cursor: pointer;
+  font-size: 10px; font-weight: 600; color: var(--muted); padding: 4px 0; cursor: pointer;
 }
 .tabbar .ti { font-size: 21px; filter: grayscale(1); opacity: .6; }
 .tabbar button.active { color: var(--accent); }
