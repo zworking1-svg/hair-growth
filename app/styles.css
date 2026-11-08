@@ -362,6 +362,10 @@ details.card > summary { padding: 2px 0; }
 .small-guide { margin: 0; padding: 12px 14px; }
 @media (max-width: 380px) { dl.guide { grid-template-columns: 1fr; } dl.guide dd { margin-bottom: 6px; } }
 
+.styling table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 6px 0; }
+.styling th, .styling td { text-align: left; vertical-align: top; padding: 7px 0; border-top: 1px solid var(--line); }
+.styling th { font-weight: 700; padding-right: 10px; width: 42%; }
+
 /* навигация */
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;

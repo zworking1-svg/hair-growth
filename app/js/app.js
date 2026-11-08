@@ -16,6 +16,7 @@ const today = () => S.ymd(new Date());
 const hm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 const pct = (x) => (x == null ? '—' : Math.round(x * 100) + '%');
 const KIND_ICON = { oral: '💊', topical: '🧴', procedure: '✨' };
+const APP_VERSION = '1.3 · 8 ноября 2026';
 
 function fmtDay(date, opts = { weekday: 'long', day: 'numeric', month: 'long' }) {
   return S.parseYmd(date).toLocaleDateString('ru-RU', opts);
@@ -345,6 +346,7 @@ function viewPhotos() {
       <label class="btn primary">📷 Снять<input type="file" accept="image/*" capture="environment" hidden data-photo-input></label>
       <label class="btn">🖼 Из галереи<input type="file" accept="image/*" multiple hidden data-photo-input></label>
     </div>
+    ${stylingCard()}
     <div class="chips-scroll">${zones.map(([k, l]) => `<button class="chip-btn ${state.zone === k ? 'on' : ''}" data-act="zone" data-zone="${k}">${l}</button>`).join('')}</div>
     ${state.photos.length >= 2 ? '<button class="btn wide" data-act="compare">⇆ Сравнить «до / после»</button>' : ''}
     ${groups.size ? [...groups].map(([date, ps]) => `
@@ -355,6 +357,19 @@ function viewPhotos() {
         </button>`).join('')}</div>`).join('') : `
       <div class="empty"><div class="empty-ico">📸</div><p>Фото пока нет.</p></div>`}
     ${photoGuideHtml()}`;
+}
+
+// Всегда открытая шпаргалка: как уложить волосы перед съёмкой каждой зоны.
+function stylingCard() {
+  return `
+    <div class="card styling">
+      <h3>💇 Укладка перед съёмкой</h3>
+      <p class="muted small">Волосы сухие, без средств. Для каждой зоны — своя укладка, всегда одинаковая:</p>
+      <table>${Object.entries(ZONES).filter(([k]) => k !== 'other').map(([k, l]) => `
+        <tr><th>${esc(l)}</th><td>${esc(STYLES[PHOTO_GUIDE[k].style])}</td></tr>`).join('')}
+      </table>
+      <p class="muted small">Подробно — как держать телефон, угол, свет — в разделе «Как фотографировать в ванной» ниже.</p>
+    </div>`;
 }
 
 function guideCard(zone) {
@@ -883,7 +898,7 @@ async function showSettings() {
     <button class="btn wide" data-act="export" data-photos="0">Резервная копия (без фото)</button>
     <label class="btn wide">Восстановить из копии<input type="file" accept="application/json,.json" hidden data-import></label>
     <button class="btn danger wide" data-act="wipe">Удалить все данные</button>
-    <p class="muted small">Версия 1.0</p>`);
+    <p class="muted small">Версия ${APP_VERSION}</p>`);
 }
 
 async function exportData(withPhotos) {
@@ -1101,5 +1116,15 @@ setInterval(() => { if (!document.hidden && state.tab === 'today' && !$('#sheet'
   navigator.storage?.persist?.();
   await loadAll();
   render();
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) {
+    // Проверяем обновление при каждом запуске; когда новая версия активировалась — перезагружаемся один раз.
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadController && !sessionStorage.getItem('hg-reloaded')) {
+        sessionStorage.setItem('hg-reloaded', '1');
+        location.reload();
+      }
+    });
+    navigator.serviceWorker.register('sw.js').then((r) => r.update()).catch(() => {});
+  }
 })();
